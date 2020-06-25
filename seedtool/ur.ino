@@ -3,9 +3,10 @@
 #include "bc-bech32.h"
 #include <bc-crypto-base.h>
 
+// source: https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-005-ur.md
 
 /* allocate at least 5 bytes more for byte_out than byte_in */
-size_t cbor_encode(uint8_t *byte_in, uint32_t size_in, uint8_t *byte_out, size_t byte_out_size)
+size_t cbor_encode(uint8_t *byte_in, uint32_t size_in, uint8_t *byte_out, uint32_t byte_out_size)
 {
     size_t size_out = 0;
 
@@ -45,7 +46,7 @@ size_t cbor_encode(uint8_t *byte_in, uint32_t size_in, uint8_t *byte_out, size_t
 }
 
 /* allocate at least 5 bytes more for byte_out than byte_in */
-size_t cbor_decode(uint8_t *byte_in, uint32_t size_in, uint8_t *byte_out, size_t byte_out_size)
+size_t cbor_decode(uint8_t *byte_in, uint32_t size_in, uint8_t *byte_out, uint32_t byte_out_size)
 {
     size_t size_out = 0;
 
