@@ -53,6 +53,7 @@ struct pg_export_wallet_t {
 struct pg_derivation_path_t {
     bool is_standard_derivation;
     enum stdDerivation std_derivation;
+    bool is_master_key;
 };
 
 struct pg_set_xpub_format_t {

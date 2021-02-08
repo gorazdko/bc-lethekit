@@ -76,7 +76,7 @@ bool clear_full_window = true;
 // Pages
 struct pg_show_address_t pg_show_address{0, qr_ur};
 struct pg_export_wallet_t pg_export_wallet{qr_ur};
-struct pg_derivation_path_t pg_derivation_path{true, SINGLE_NATIVE_SEGWIT};
+struct pg_derivation_path_t pg_derivation_path{true, SINGLE_NATIVE_SEGWIT, false};
 struct pg_set_xpub_format_t pg_set_xpub_format{qr_ur};
 struct pg_xpub_menu_t pg_xpub_menu = {false};
 struct pg_set_xpub_options_t pg_set_xpub_options = {false, false, 0};
@@ -2104,7 +2104,7 @@ void derivation_path(void) {
 
 void custom_derivation_path(void) {
 
-    String path_start = "m/";;
+    String path_start = "m/";
     String path_entered = keystore.derivation_path.substring(2);
     int x_off = 5;
     bool path_is_valid = true;
@@ -2169,6 +2169,11 @@ void custom_derivation_path(void) {
       switch (key) {
         case '#':
             if (path_is_valid) {
+                if (pg_derivation_path.is_master_key == true) {
+                    g_uistate = DISPLAY_KEYS;
+                    return;
+                }
+                // path check happens again but it is also saved
                 bool ret = keystore.check_derivation_path((path_start + path_entered).c_str(), true);
                 if (ret == false) {
                     g_uistate = ERROR_SCREEN;
@@ -2199,8 +2204,13 @@ void custom_derivation_path(void) {
             break;
       }
 
-      if (keystore.check_derivation_path((path_start + path_entered).c_str(), false)) {
+      if (path_start + path_entered == "m/")
+      {
+          pg_derivation_path.is_master_key = true;
+      }
+      else if (keystore.check_derivation_path((path_start + path_entered).c_str(), false)) {
           path_is_valid = true;
+          pg_derivation_path.is_master_key = false;
       }
       else {
           path_is_valid = false;
@@ -2294,10 +2304,11 @@ void set_xpub_options() {
         g_display->setCursor(xx, yy);
         g_display->println("slip132: ");
 
-        display_text(pg_set_xpub_options.slip132 ? "True" : "False", xx + 80, yy, pg_set_xpub_options.current == 0);
+        String val = pg_set_xpub_options.slip132 ? "True" : "False";
+        if  (keystore.is_standard_derivation_path(NULL) == false)
+            val = "/";
+        display_text(val.c_str(), xx + 80, yy, pg_set_xpub_options.current == 0);
         g_display->setTextColor(GxEPD_BLACK);
-
-        //yy += H_FSB9 + YM_FSB9;
 
 
         yy += H_FSB9 + 2*YM_FSB9;
@@ -2366,12 +2377,16 @@ void display_keys(void) {
     String ur_string;
     String ur_xpriv_string;
     String ur_xpub_string;
+    String ur_master_key;
     String encoding_type;
     const int nrows = 5;
     int scroll = 0;
     String derivation_path = keystore.get_derivation_path();
     int scroll_strlen = 17;
     bool ret;
+    char *hdkey = NULL;
+    char *xpriv = NULL;
+    char *xpub = NULL;
 
     ret = keystore.update_root_key(g_bip39->mnemonic_seed, BIP39_SEED_LEN_512);
     if (ret == false) {
@@ -2385,15 +2400,12 @@ void display_keys(void) {
         return;
     }
 
-    char *hdkey = NULL;
-    char *xpub = NULL;
     ret = keystore.xpub_to_base58(&key, &xpub, pg_set_xpub_options.slip132);
     if (ret == false) {
         g_uistate = ERROR_SCREEN;
         return;
     }
 
-    char *xpriv = NULL;
     ret = keystore.xpriv_to_base58(&key, &xpriv, pg_set_xpub_options.slip132);
     if (ret == false) {
         g_uistate = ERROR_SCREEN;
@@ -2412,9 +2424,29 @@ void display_keys(void) {
         return;
     }
 
+    if (pg_derivation_path.is_master_key == true) {
+
+      derivation_path = " "; // master key does not have a path
+      ret = keystore.xpriv_to_base58(&keystore.root, &xpriv, false);
+      if (ret == false) {
+         g_uistate = ERROR_SCREEN;
+         return;
+      }
+
+      ret = ur_encode_master_key(ur_master_key);
+      if (ret == false) {
+          g_uistate = ERROR_SCREEN;
+          return;
+      }
+  }
+
     while (true) {
 
-     if (pg_set_xpub_options.show_private_key) {
+     if (pg_derivation_path.is_master_key == true) {
+         ur_string = ur_master_key;
+         hdkey = xpriv;
+     }
+     else if (pg_set_xpub_options.show_private_key) {
          ur_string = ur_xpriv_string;
          hdkey = xpriv;
      }
@@ -2430,7 +2462,9 @@ void display_keys(void) {
           g_display->fillScreen(GxEPD_WHITE);
           g_display->setTextColor(GxEPD_BLACK);
 
-          const char * title = pg_set_xpub_options.show_private_key ? "Xpriv": "Xpub";
+          const char * title = (pg_set_xpub_options.show_private_key) ? "Xprv": "Xpub";
+          if (pg_derivation_path.is_master_key)
+              title = "Master key";
 
           int yy = 18;
           g_display->setFont(&FreeSansBold9pt7b);
@@ -2445,7 +2479,7 @@ void display_keys(void) {
                 if (pg_set_xpub_options.show_derivation_path) {
                     char fingerprint[9] = {0};
                     sprintf(fingerprint, "%08x", (unsigned int)keystore.fingerprint);
-                    String txt = "[" + String(fingerprint) + keystore.get_derivation_path().substring(1) + "]" + String(hdkey);
+                    String txt = "[" + String(fingerprint) + derivation_path.substring(1) + "]" + String(hdkey);
                     for (int k = 0; k < nrows; ++k) {
                         g_display->setCursor(5, yy);
                         display_printf("%s", txt.substring((k + scroll)*scroll_strlen, (1+k + scroll)*scroll_strlen).c_str());
@@ -2460,7 +2494,7 @@ void display_keys(void) {
                 if (pg_set_xpub_options.show_derivation_path) {
                     char fingerprint[9] = {0};
                     sprintf(fingerprint, "%08x", (unsigned int)keystore.fingerprint);
-                    String fing = "[" + String(fingerprint) + keystore.get_derivation_path().substring(1) + "]" + String(hdkey);
+                    String fing = "[" + String(fingerprint) + derivation_path.substring(1) + "]" + String(hdkey);
                     displayQR((char *)fing.c_str());
                 }
                 else {

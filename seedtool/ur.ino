@@ -119,6 +119,28 @@ size_t cbor_encode_output_descriptor(struct ext_key *key, uint8_t **buff_out, ui
     return output.getSize();
 }
 
+
+size_t cbor_encode_master_key(struct ext_key *key, uint8_t **buff_out) {
+
+    CborDynamicOutput output;
+    CborWriter writer(output);
+
+    writer.writeMap(3);
+
+    writer.writeInt(1); // is-master
+    uint32_t cbor_true = 21;
+    writer.writeSpecial(cbor_true);
+    writer.writeInt(3);
+    writer.writeBytes(key->priv_key, sizeof(key->priv_key));
+    writer.writeInt(4);
+    writer.writeBytes(key->chain_code, sizeof(key->chain_code));
+
+    *buff_out = (uint8_t *)malloc(output.getSize());
+    memcpy(*buff_out, output.getData(), output.getSize());
+
+    return output.getSize();
+}
+
 size_t cbor_encode_hdkey_xpub(struct ext_key *key, uint8_t **buff_out, uint32_t parent_fingerprint, uint32_t *derivation, uint32_t derivation_len) {
 
     CborDynamicOutput output;
@@ -321,6 +343,31 @@ bool ur_encode_hd_pubkey_xpriv(String &xpriv_bytewords, uint32_t *derivation, ui
 
     //Serial.println("cbor xpriv:");
     //print_hex(cbor_xpriv, cbor_xpriv_size);
+
+    retval = ur_encode("crypto-hdkey", cbor_xpriv, cbor_xpriv_size, xpriv_bytewords);
+    if (retval == false) {
+        return false;
+    }
+
+    // @FIXME: free also on premature exit
+    free(cbor_xpriv);
+
+    return true;
+}
+
+
+bool ur_encode_master_key(String &xpriv_bytewords) {
+    bool retval;
+
+    uint8_t *cbor_xpriv = NULL;
+
+    size_t cbor_xpriv_size = cbor_encode_master_key(&keystore.root, &cbor_xpriv);
+    if (cbor_xpriv_size == 0) {
+        return false;
+    }
+
+    Serial.println("master key:");
+    print_hex(cbor_xpriv, cbor_xpriv_size);
 
     retval = ur_encode("crypto-hdkey", cbor_xpriv, cbor_xpriv_size, xpriv_bytewords);
     if (retval == false) {
